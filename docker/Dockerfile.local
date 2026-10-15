@@ -25,6 +25,7 @@ RUN apt-get update && apt-get install --yes --no-install-recommends \
     && apt-get --yes --no-install-recommends install \
          docker-ce-cli \
          docker-compose-plugin \
+         docker-buildx-plugin \
     && rm -rf /var/lib/apt/lists/* \
     && npm install -g tsx
 

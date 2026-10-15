@@ -5,10 +5,12 @@
 #   cp .env.example .env   # once
 #   mkdir -p stacks data
 #   docker compose -f compose.yaml up -d --build --cap-drop=ALL
+#   
+# Restart:
+#   docker compose -f compose.yaml up -d --force-recreate  
 #
-# Stacks bind: host path must equal container path (Docker-via-socket).
-# Default bind is $PWD/stacks. Override with DOCKGE_STACKS_BIND in .env
-# (absolute path). DOCKGE_STACKS_DIR in .env is for npm run dev only.
+# Stacks directory: host path must equal container path (Docker-via-socket).
+# Override with DOCKGE_STACKS_DIR in .env (absolute path). Default is /opt/stacks.
 
 services:
   dockge:
@@ -21,12 +23,14 @@ services:
       - "${NETBIRD_IP:-127.0.0.1}:${DOCKGE_HOST_PORT:-5001}:${DOCKGE_PORT:-5001}"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
-      - ${DOCKGE_DATA_DIR}:/app/data
-      - ${DOCKGE_STACKS_BIND:-$PWD/stacks}:${DOCKGE_STACKS_BIND:-$PWD/stacks}
+      - ${DOCKGE_DATA_DIR:-./data}:/app/data
+      - ${DOCKGE_STACKS_DIR:-/opt/stacks}:${DOCKGE_STACKS_DIR:-/opt/stacks}
     environment:
-      DOCKGE_PORT: ${DOCKGE_PORT}
+      DOCKGE_PORT: ${DOCKGE_PORT:-5001}
       DOCKGE_DATA_DIR: /app/data
-      DOCKGE_STACKS_DIR: ${DOCKGE_STACKS_BIND:-$PWD/stacks}
+      DOCKGE_STACKS_DIR: ${DOCKGE_STACKS_DIR:-/opt/stacks}
+      DOCKER_BUILDKIT: 1
+      COMPOSE_DOCKER_CLI_BUILD: 1
     networks:
       - proxy_net
 
