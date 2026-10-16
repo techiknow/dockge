@@ -71,6 +71,7 @@ COPY --chown=node:node backend ./backend
 COPY --chown=node:node common ./common
 COPY --chown=node:node extra ./extra
 RUN mkdir ./data
+RUN chmod +x ./extra/entrypoint.sh
 
 ENV UV_USE_IO_URING=0
 ENV DOCKGE_IS_CONTAINER=1
@@ -78,5 +79,5 @@ ENV DOCKGE_IS_CONTAINER=1
 VOLUME /app/data
 EXPOSE 5001
 HEALTHCHECK --interval=60s --timeout=30s --start-period=60s --retries=5 CMD extra/healthcheck
-ENTRYPOINT ["/usr/bin/dumb-init", "--"]
+ENTRYPOINT ["/usr/bin/dumb-init", "--", "/app/extra/entrypoint.sh"]
 CMD ["tsx", "./backend/index.ts"]
