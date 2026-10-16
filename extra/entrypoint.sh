@@ -1,6 +1,9 @@
 #!/bin/sh
 set -e
 
+# Trust all stack directories regardless of host UID ownership
+git config --system --add safe.directory '*'
+
 # If host SSH directory is mounted, copy and fix ownership/permissions for root
 if [ -d "/root/.ssh-host" ]; then
     mkdir -p /root/.ssh
