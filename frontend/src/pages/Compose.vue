@@ -153,6 +153,7 @@
                             @start-service="startService"
                             @stop-service="stopService"
                             @restart-service="restartService"
+                            @rename-service="renameContainer"
                         />
                     </div>
 
@@ -483,6 +484,13 @@ export default {
 
                     this.stack.composeYAML = doc.toString();
                     this.yamlDoc = doc;
+
+                    try {
+                        let env = dotenv.parse(this.stack.composeENV || "");
+                        let envYAML = envsubstYAML(this.stack.composeYAML, env);
+                        this.envsubstJSONConfig = this.yamlToJSON(envYAML).config;
+                    } catch (e) {
+                    }
                 }
             },
             deep: true,
@@ -859,6 +867,79 @@ export default {
                 block: "start",
                 behavior: "smooth"
             });
+        },
+
+        renameContainer(oldName, rawNewName, done) {
+            const newName = (rawNewName ?? "").trim();
+
+            if (!newName) {
+                this.$root.toastError(this.$t("containerNameEmpty"));
+                done?.(false);
+                return;
+            }
+
+            if (newName === oldName) {
+                done?.(true);
+                return;
+            }
+
+            if (!/^[a-zA-Z0-9._-]+$/.test(newName)) {
+                this.$root.toastError(this.$t("containerNameInvalid"));
+                done?.(false);
+                return;
+            }
+
+            if (Object.prototype.hasOwnProperty.call(this.jsonConfig.services, newName)) {
+                this.$root.toastError(this.$t("containerNameExists"));
+                done?.(false);
+                return;
+            }
+
+            // Update AST keys in yamlDoc first so copyYAMLComments preserves comments on renamed/dependent services
+            if (this.yamlDoc?.contents?.items) {
+                const servicesPair = this.yamlDoc.contents.items.find((item) => item.key?.value === "services");
+                if (servicesPair?.value?.items) {
+                    for (const svcPair of servicesPair.value.items) {
+                        if (svcPair.key?.value === oldName) {
+                            svcPair.key.value = newName;
+                        }
+                        if (svcPair.value?.items) {
+                            const dependsPair = svcPair.value.items.find((item) => item.key?.value === "depends_on");
+                            if (dependsPair?.value?.items) {
+                                for (const depItem of dependsPair.value.items) {
+                                    if (depItem.value === oldName) {
+                                        depItem.value = newName;
+                                    } else if (depItem.key?.value === oldName) {
+                                        depItem.key.value = newName;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Rebuild services object preserving key order and updating depends_on references
+            const updatedServices = {};
+            for (const [ svcName, svcConfig ] of Object.entries(this.jsonConfig.services)) {
+                if (svcConfig && typeof svcConfig === "object" && svcConfig.depends_on) {
+                    if (Array.isArray(svcConfig.depends_on)) {
+                        svcConfig.depends_on = svcConfig.depends_on.map((dep) => (dep === oldName ? newName : dep));
+                    } else if (typeof svcConfig.depends_on === "object") {
+                        const updatedDeps = {};
+                        for (const [ depKey, depVal ] of Object.entries(svcConfig.depends_on)) {
+                            updatedDeps[depKey === oldName ? newName : depKey] = depVal;
+                        }
+                        svcConfig.depends_on = updatedDeps;
+                    }
+                }
+
+                const targetName = svcName === oldName ? newName : svcName;
+                updatedServices[targetName] = svcConfig;
+            }
+
+            this.jsonConfig.services = updatedServices;
+            done?.(true);
         },
 
         stackNameToLowercase() {
