@@ -436,9 +436,33 @@ export class Stack {
         return options;
     }
 
+    protected async getGitHashEnv() : Promise<Record<string, string>> {
+        if (!fs.existsSync(path.join(this.path, ".git"))) {
+            return {};
+        }
+
+        try {
+            const res = await childProcessAsync.spawn("git", [ "rev-parse", "--short", "HEAD" ], {
+                cwd: this.path,
+                encoding: "utf-8",
+            });
+            const gitHash = (res.stdout || "").toString().trim();
+            if (gitHash) {
+                return {
+                    GIT_HASH: gitHash,
+                };
+            }
+        } catch (e) {
+            log.debug("git", "Could not resolve GIT_HASH: " + (e instanceof Error ? e.message : String(e)));
+        }
+
+        return {};
+    }
+
     async start(socket: DockgeSocket) {
         const terminalName = getComposeTerminalName(socket.endpoint, this.name);
-        let exitCode = await Terminal.exec(this.server, socket, terminalName, "docker", this.getComposeOptions("up", "-d", "--remove-orphans"), this.path);
+        const env = await this.getGitHashEnv();
+        let exitCode = await Terminal.exec(this.server, socket, terminalName, "docker", this.getComposeOptions("up", "-d", "--build", "--remove-orphans"), this.path, env);
         if (exitCode !== 0) {
             throw new Error("Failed to start, please check the terminal output for more information.");
         }
@@ -456,7 +480,8 @@ export class Stack {
 
     async restart(socket: DockgeSocket) : Promise<number> {
         const terminalName = getComposeTerminalName(socket.endpoint, this.name);
-        let exitCode = await Terminal.exec(this.server, socket, terminalName, "docker", this.getComposeOptions("restart"), this.path);
+        const env = await this.getGitHashEnv();
+        let exitCode = await Terminal.exec(this.server, socket, terminalName, "docker", this.getComposeOptions("up", "-d", "--build", "--remove-orphans"), this.path, env);
         if (exitCode !== 0) {
             throw new Error("Failed to restart, please check the terminal output for more information.");
         }

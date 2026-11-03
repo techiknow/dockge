@@ -25,6 +25,7 @@ export class Terminal {
     protected file : string;
     protected args : string | string[];
     protected cwd : string;
+    protected env? : Record<string, string>;
     protected callback? : (exitCode : number) => void;
 
     protected _rows : number = TERMINAL_ROWS;
@@ -36,13 +37,14 @@ export class Terminal {
 
     protected socketList : Record<string, DockgeSocket> = {};
 
-    constructor(server : DockgeServer, name : string, file : string, args : string | string[], cwd : string) {
+    constructor(server : DockgeServer, name : string, file : string, args : string | string[], cwd : string, env? : Record<string, string>) {
         this.server = server;
         this._name = name;
         //this._name = "terminal-" + Date.now() + "-" + getCryptoRandomInt(0, 1000000);
         this.file = file;
         this.args = args;
         this.cwd = cwd;
+        this.env = env;
 
         Terminal.terminalMap.set(this.name, this);
     }
@@ -112,12 +114,27 @@ export class Terminal {
         }
 
         try {
-            this._ptyProcess = pty.spawn(this.file, this.args, {
+            const spawnOptions : pty.IPtyForkOptions = {
                 name: this.name,
                 cwd: this.cwd,
                 cols: TERMINAL_COLS,
                 rows: this.rows,
-            });
+            };
+
+            if (this.env) {
+                const baseEnv : Record<string, string> = {};
+                for (const [ key, value ] of Object.entries(process.env)) {
+                    if (value !== undefined) {
+                        baseEnv[key] = value;
+                    }
+                }
+                spawnOptions.env = {
+                    ...baseEnv,
+                    ...this.env,
+                };
+            }
+
+            this._ptyProcess = pty.spawn(this.file, this.args, spawnOptions);
 
             // On Data
             this._ptyProcess.onData((data) => {
@@ -221,7 +238,7 @@ export class Terminal {
         return terminal;
     }
 
-    public static exec(server : DockgeServer, socket : DockgeSocket | undefined, terminalName : string, file : string, args : string | string[], cwd : string) : Promise<number> {
+    public static exec(server : DockgeServer, socket : DockgeSocket | undefined, terminalName : string, file : string, args : string | string[], cwd : string, env? : Record<string, string>) : Promise<number> {
         return new Promise((resolve, reject) => {
             // check if terminal exists
             if (Terminal.terminalMap.has(terminalName)) {
@@ -229,7 +246,7 @@ export class Terminal {
                 return;
             }
 
-            let terminal = new Terminal(server, terminalName, file, args, cwd);
+            let terminal = new Terminal(server, terminalName, file, args, cwd, env);
             terminal.rows = PROGRESS_TERMINAL_ROWS;
 
             if (socket) {
@@ -238,6 +255,30 @@ export class Terminal {
 
             terminal.onExit((exitCode : number) => {
                 resolve(exitCode);
+            });
+            terminal.start();
+        });
+    }
+
+    public static execWithOutput(server : DockgeServer, socket : DockgeSocket | undefined, terminalName : string, file : string, args : string | string[], cwd : string, env? : Record<string, string>) : Promise<{ exitCode: number; output: string }> {
+        return new Promise((resolve, reject) => {
+            if (Terminal.terminalMap.has(terminalName)) {
+                reject("Another operation is already running, please try again later.");
+                return;
+            }
+
+            let terminal = new Terminal(server, terminalName, file, args, cwd, env);
+            terminal.rows = PROGRESS_TERMINAL_ROWS;
+
+            if (socket) {
+                terminal.join(socket);
+            }
+
+            terminal.onExit((exitCode : number) => {
+                resolve({
+                    exitCode,
+                    output: terminal.getBuffer(),
+                });
             });
             terminal.start();
         });

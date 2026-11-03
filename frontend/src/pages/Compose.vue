@@ -36,41 +36,37 @@
                         {{ $t("restartStack") }}
                     </button>
 
-                    <button v-if="!isEditMode" class="btn btn-normal" :disabled="processing" @click="updateStack">
-                        <font-awesome-icon icon="cloud-arrow-down" class="me-1" />
-                        {{ $t("updateStack") }}
-                    </button>
-
                     <button v-if="!isEditMode && active" class="btn btn-normal" :disabled="processing" @click="stopStack">
                         <font-awesome-icon icon="stop" class="me-1" />
                         {{ $t("stopStack") }}
                     </button>
 
-                    <BDropdown right text="" variant="normal">
+                    <BDropdown v-if="!isEditMode" right text="" variant="normal" :disabled="processing">
                         <BDropdownItem @click="downStack">
                             <font-awesome-icon icon="stop" class="me-1" />
                             {{ $t("downStack") }}
+                        </BDropdownItem>
+                        <BDropdownDivider />
+                        <BDropdownItem variant="danger" @click="showDeleteDialog = !showDeleteDialog">
+                            <font-awesome-icon icon="trash" class="me-1" />
+                            {{ $t("deleteStack") }}
                         </BDropdownItem>
                     </BDropdown>
                 </div>
 
                 <div v-if="stack.isGitSource && !isEditMode" class="btn-group me-2" role="group">
                     <button class="btn btn-normal" :disabled="processing" @click="fetchGitStatus">
-                        <font-awesome-icon icon="cloud-arrow-down" class="me-1" />
+                        <font-awesome-icon icon="arrows-rotate" class="me-1" />
                         {{ $t("Fetch") }}
                     </button>
 
                     <button class="btn btn-normal" :disabled="processing" @click="pullGit">
-                        <font-awesome-icon icon="download" class="me-1" />
+                        <font-awesome-icon icon="cloud-arrow-down" class="me-1" />
                         {{ $t("Pull") }}
                     </button>
                 </div>
 
                 <button v-if="isEditMode && !isAdd" class="btn btn-normal" :disabled="processing" @click="discardStack">{{ $t("discardStack") }}</button>
-                <button v-if="!isEditMode" class="btn btn-danger" :disabled="processing" @click="showDeleteDialog = !showDeleteDialog">
-                    <font-awesome-icon icon="trash" class="me-1" />
-                    {{ $t("deleteStack") }}
-                </button>
             </div>
 
             <!-- URLs -->
@@ -762,9 +758,6 @@ export default {
                 this.processing = false;
                 if (res.ok) {
                     this.$toast.success(this.$t("Successfully pulled latest changes."));
-                    if (res.output) {
-                        this.$toast.info(res.output);
-                    }
                     this.loadStack();
                 } else {
                     this.$toast.error(res.msg);

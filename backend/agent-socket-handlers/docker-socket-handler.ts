@@ -171,6 +171,8 @@ export class DockerSocketHandler extends AgentSocketHandler {
                     msgi18n: true,
                 }, callback);
                 server.sendStackList();
+
+                stack.joinCombinedTerminal(socket);
             } catch (e) {
                 callbackError(e, callback);
             }

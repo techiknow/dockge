@@ -6,6 +6,8 @@ import { R } from "redbean-node";
 import childProcessAsync from "promisify-child-process";
 import fs from "fs";
 import path from "path";
+import { getComposeTerminalName } from "../../common/util-common";
+import { Terminal } from "../terminal";
 
 export class GitSourceSocketHandler extends SocketHandler {
     create(socket: DockgeSocket, server: DockgeServer) {
@@ -112,24 +114,26 @@ export class GitSourceSocketHandler extends SocketHandler {
                     throw new Error("Stack directory does not exist.");
                 }
 
+                const terminalName = getComposeTerminalName(socket.endpoint, stackName);
+
                 // Fetch latest from remote
-                await childProcessAsync.spawn("git", ["remote", "update"], {
-                    cwd: stackPath,
-                    encoding: "utf-8",
-                });
+                const fetchExitCode = await Terminal.exec(server, socket, terminalName, "git", ["remote", "update"], stackPath);
+                if (fetchExitCode !== 0) {
+                    throw new Error("Failed to fetch from remote, please check the terminal output for more information.");
+                }
 
                 // Check status
-                const res = await childProcessAsync.spawn("git", ["status", "-uno"], {
-                    cwd: stackPath,
-                    encoding: "utf-8",
-                });
+                const statusRes = await Terminal.execWithOutput(server, socket, terminalName, "git", ["status", "-uno"], stackPath);
+                if (statusRes.exitCode !== 0) {
+                    throw new Error("Failed to check git status, please check the terminal output for more information.");
+                }
 
-                const output = (res.stdout || "").toString();
+                const output = statusRes.output;
                 const isBehind = output.includes("Your branch is behind");
 
                 let statusMessage = "Branch is up to date.";
                 if (isBehind) {
-                    const lines = output.split("\n");
+                    const lines = output.split(/\r?\n/);
                     const behindLine = lines.find((line: string) => line.includes("Your branch is behind"));
                     if (behindLine) {
                         statusMessage = behindLine.trim();
@@ -140,9 +144,10 @@ export class GitSourceSocketHandler extends SocketHandler {
 
                 callback({ ok: true, isBehind, statusMessage });
             } catch (e: any) {
-                const stderr = e.stderr ? `\n${e.stderr.toString()}` : "";
-                log.error("git", `Failed to fetch git source status: ${e.message}${stderr}`);
-                callback({ ok: false, msg: `${e.message}${stderr}` });
+                const msg = e instanceof Error ? e.message : String(e);
+                const stderr = e?.stderr ? `\n${e.stderr.toString()}` : "";
+                log.error("git", `Failed to fetch git source status: ${msg}${stderr}`);
+                callback({ ok: false, msg: `${msg}${stderr}` });
             }
         });
 
@@ -156,18 +161,20 @@ export class GitSourceSocketHandler extends SocketHandler {
                     throw new Error("Stack directory does not exist.");
                 }
 
-                const res = await childProcessAsync.spawn("git", ["pull"], {
-                    cwd: stackPath,
-                    encoding: "utf-8",
-                });
-                
-                const output = (res.stdout || "").toString().trim();
+                const terminalName = getComposeTerminalName(socket.endpoint, stackName);
+                const res = await Terminal.execWithOutput(server, socket, terminalName, "git", ["pull"], stackPath);
+                if (res.exitCode !== 0) {
+                    throw new Error("Failed to pull latest changes, please check the terminal output for more information.");
+                }
+
+                const output = res.output.trim();
 
                 callback({ ok: true, output });
             } catch (e: any) {
-                const stderr = e.stderr ? `\n${e.stderr.toString()}` : "";
-                log.error("git", `Failed to pull git source: ${e.message}${stderr}`);
-                callback({ ok: false, msg: `${e.message}${stderr}` });
+                const msg = e instanceof Error ? e.message : String(e);
+                const stderr = e?.stderr ? `\n${e.stderr.toString()}` : "";
+                log.error("git", `Failed to pull git source: ${msg}${stderr}`);
+                callback({ ok: false, msg: `${msg}${stderr}` });
             }
         });
 
