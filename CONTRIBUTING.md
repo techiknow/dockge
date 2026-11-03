@@ -125,6 +125,40 @@ docker compose -f compose.yaml up -d --build
 
 Open `http://localhost:<DOCKGE_HOST_PORT>` (default `5001`).
 
+### Tagging builds with Git commit hash
+
+To tag images or pass the current Git commit hash into builds:
+
+```bash
+GIT_HASH=$(git rev-parse --short HEAD) docker compose -f compose.yaml up -d --build
+```
+
+- `$(git rev-parse --short HEAD)`: Resolves the 7-character Git commit hash.
+- `GIT_HASH`: Exposes the hash as an environment variable for Compose.
+
+To consume `GIT_HASH` in your services:
+
+```yaml
+# compose.yaml
+services:
+  app:
+    build:
+      context: .
+      args:
+        GIT_HASH: ${GIT_HASH:-dev}
+    image: app:${GIT_HASH:-latest}
+    environment:
+      - GIT_HASH=${GIT_HASH:-dev}
+```
+
+```dockerfile
+# Dockerfile
+ARG GIT_HASH=unknown
+ENV GIT_HASH=${GIT_HASH}
+```
+
+> **Note:** Dockge automatically inspects `.git` in stack directories and injects `GIT_HASH` into the environment during stack actions (`start`, `restart`).
+
 ## Database Migration
 
 TODO
